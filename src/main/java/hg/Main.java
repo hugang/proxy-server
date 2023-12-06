@@ -1,22 +1,60 @@
 package hg;
 
+import cn.hutool.setting.Setting;
+import cn.hutool.setting.SettingUtil;
 import io.netty.handler.codec.http.HttpObject;
 import io.netty.handler.codec.http.HttpRequest;
 import org.littleshoot.proxy.ChainedProxyAdapter;
 import org.littleshoot.proxy.impl.DefaultHttpProxyServer;
 
+import javax.swing.*;
+import java.awt.*;
 import java.net.*;
 import java.util.Base64;
 
 public class Main {
-    public static void main(String[] args) throws UnknownHostException {
+
+    public static void main(String[] args) throws Exception {
+        if (!SystemTray.isSupported()) {
+            System.out.println("SystemTray is not supported");
+            return;
+        }
+        final PopupMenu popup = new PopupMenu();
+        final TrayIcon trayIcon = new TrayIcon(createImage("/icon.png", "tray icon"));
+        final SystemTray tray = SystemTray.getSystemTray();
+
+        MenuItem exitItem = new MenuItem("Exit");
+        exitItem.addActionListener(e -> System.exit(0));
+
+        popup.add(exitItem);
+        trayIcon.setPopupMenu(popup);
+
+        // start proxy server
         new Main().start();
+
+        try {
+            tray.add(trayIcon);
+        } catch (AWTException e) {
+            System.out.println("TrayIcon could not be added.");
+        }
     }
 
-    static final String PROXY_USER = "PROXY_USER";
-    static final String PROXY_PASSWORD = "PROXY_PASSWORD";
-    static final String PROXY_HOST = "127.0.0.1";
-    static final Integer PROXY_PORT = 8080;
+    protected static Image createImage(String path, String description) {
+        URL imageURL = Main.class.getResource(path);
+
+        if (imageURL == null) {
+            System.err.println("Resource not found: " + path);
+            return null;
+        } else {
+            return (new ImageIcon(imageURL, description)).getImage();
+        }
+    }
+
+    static final Setting settings = SettingUtil.get("proxy.setting");
+    static final String PROXY_USER = settings.getStr("PROXY_USER");
+    static final String PROXY_PASSWORD = settings.getStr("PROXY_PASSWORD");
+    static final String PROXY_HOST = settings.getStr("PROXY_HOST");
+    static final Integer PROXY_PORT = Integer.valueOf(settings.get("PROXY_PORT"));
     static final String AUTH_HEADER = new String(Base64.getEncoder().encode((PROXY_USER + ":" + PROXY_PASSWORD).getBytes()));
 
     public void start() throws UnknownHostException {
@@ -61,8 +99,7 @@ public class Main {
 
         @Override
         public void filterRequest(HttpObject httpObject) {
-            if (httpObject instanceof HttpRequest) {
-                HttpRequest httpRequest = (HttpRequest) httpObject;
+            if (httpObject instanceof HttpRequest httpRequest) {
                 httpRequest.headers().add("Proxy-Authorization", "Basic" + AUTH_HEADER);
             }
             super.filterRequest(httpObject);
